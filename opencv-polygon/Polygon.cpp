@@ -12,9 +12,9 @@ using namespace std;
 int main() {
 
 //  загружаем исходник
-	Mat src = imread("test1.jpg", 1);
-	namedWindow("src", 1);
-	imshow("imshow", src);
+	Mat src = imread("test0_copy.jpg", 1);
+	namedWindow("src", 0);
+	imshow("src", src);
 
 //  конвертируем в HSV
 	Mat hsv;
@@ -47,33 +47,19 @@ int main() {
 
 //	ищем контуры
 	vector< vector<Point> > contours;
-	findContours(s_range, contours, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	Mat hierarchy;
+	findContours(s_range, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 
 //	создаём картинку под маску
-	Mat mask = Mat::zeros(canny.rows, canny.cols, CV_8UC1);
-
-//	CV_FILLED заполняет найденный контуры
-	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
-	namedWindow("Mask", 1);
-	imshow("Mask", mask);
+	Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
 
 	std::ofstream fout;
 	fout.open("edges_area.txt");
 	for (unsigned int i = 0; i < contours.size(); i++)
 	{
-		if (contours[i].size() > 4)
+		if (contours[i].size() > 6)
 		{
-			for (unsigned int j = 0; j < contours[i].size(); j++)
-			{
-//				std::cout << "Точка(x,y)=" << contours[i][j] << std::endl;
-//				fout << "Точка(x,y)=" << contours[i][j] << "\n";
-			}
-
-//			std::cout << "# of contour points: " << contours[i].size() << std::endl;
-//			fout << "@@@@@@@@@@@@@ of contour points: " << contours[i].size() << "\n";
-
 			double varContourArea = contourArea(contours[i]);
-
 			// исходя из определённых расчётов относительно длины моей ноги и разрешения камеры
 			// мы приходим к выводу, что 815 пикселей соответствуют 33 сантиметрам
 			// следовательно 664225 кв. пикселя = 1089 кв. сантимера
@@ -82,11 +68,24 @@ int main() {
 			double areaInSm = varContourArea / 664225;
 			areaInSm = areaInSm * 1089;
 
-			if (areaInSm > 50) {
-				std::cout << " Area: " << varContourArea << std::endl;
-				fout << "########################## Area in px: " << varContourArea << "\n" << "\n";
-				cout << "Площадь в квадратных сантимертах: " << areaInSm << endl;
-				fout << "Площадь в квадратных сантимертах: " << areaInSm << endl;
+			//вывод информации и отрисовка контура выполняется только при площади контура более 50 кв. см.
+			if (areaInSm > 50)
+			{
+				for (unsigned int j = 0; j < contours[i].size(); j++)
+				{
+					cout << "Point(x,y)=" << contours[i][j] << endl;
+					fout << "Point(x,y)=" << contours[i][j] << endl;
+				}
+				
+				cout << endl << "# of contour points: " << contours[i].size() << endl;
+				cout << "Area in px: " << varContourArea << endl;
+				cout << "Area in cm: " << areaInSm << endl;
+				cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
+
+				fout << endl << "# of contour points: " << contours[i].size() << endl;
+				fout << "Area in px: " << varContourArea << endl;
+				fout << "Area in cm: " << areaInSm << endl << endl;
+				fout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
 			}
 		}
 	}
@@ -95,6 +94,15 @@ int main() {
 //	normalize so imwrite(...)/imshow(...) shows the mask correctly!
 //	normalize(mask.clone(), mask, 0.0, 255.0, CV_MINMAX, CV_8UC1);
 
+//	рисуем контуры
+//	CV_FILLED заполняет найденные контуры
+	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
+
+//	отображаем нарисованные контуры
+	namedWindow("Mask", 0);
+	imshow("Mask", mask);
+
+//	сохраняем необходимые изображения
 	imwrite("canny.jpg", canny);
 	imwrite("mask.jpg", mask);
 
