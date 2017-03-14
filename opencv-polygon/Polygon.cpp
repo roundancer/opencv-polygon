@@ -23,35 +23,31 @@ int main() {
 	//  разбиваем на каналы
 	Mat hsv_channels[3];
 	split(hsv, hsv_channels);
-	//  показываем каналы
-	namedWindow("H", 0);
-	namedWindow("S", 0);
-	namedWindow("V", 0);
-	imshow("H", hsv_channels[0]);
-	imshow("S", hsv_channels[1]);
-	imshow("V", hsv_channels[2]);
 
-	//	делаем выборку по насыщенности
+	//  делаем выборку по насыщенности
 	Mat s_range;
 	inRange(hsv_channels[1], 0, 60, s_range);
-	//	показываем результат выборки
+	//  показываем результат выборки
 	namedWindow("S_Range", 0);
 	imshow("S_Range", s_range);
 
-	//	проходимся ДГК по выборке по насыщенности
+	//  проходимся ДГК по выборке по насыщенности
 	Mat canny;
 	Canny(s_range, canny, 100, 200);
-	//	показываем результат работы ДГК
+	//  показываем результат работы ДГК
 	namedWindow("Canny", 0);
 	imshow("Canny", canny);
+	//  работает он странно для работы
 
-	//	ищем контуры
+	//  ищем контуры
 	vector< vector<Point> > contours;
 	Mat hierarchy;
 	findContours(s_range, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 
-	//	создаём картинку под маску
+	//  создаём картинку под маску
 	Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
+	//  рисуем контуры
+	drawContours(mask, contours, -1, Scalar(255), CV_FILLED); // CV_FILLED заполняет найденные контуры
 
 	std::ofstream fout;
 	fout.open("edges_area.txt");
@@ -91,18 +87,47 @@ int main() {
 	}
 	fout.close();
 
-	//	normalize so imwrite(...)/imshow(...) shows the mask correctly!
-	//	normalize(mask.clone(), mask, 0.0, 255.0, CV_MINMAX, CV_8UC1);
+	//  normalize so imwrite(...)/imshow(...) shows the mask correctly!
+	//  normalize(mask.clone(), mask, 0.0, 255.0, CV_MINMAX, CV_8UC1);
 
-	//	рисуем контуры
-	//	CV_FILLED заполняет найденные контуры
-	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
+	Mat cloneMask = mask.clone();
+	Mat cloneSrc = src.clone();
 
-	//	отображаем нарисованные контуры
+	namedWindow("cloneSrc", 0);
+	imshow("cloneSrc", cloneSrc);
+	namedWindow("cloneMask", 0);
+	imshow("cloneMask", cloneMask);
+
+	Mat alphaBlending[3];
+	Mat alphaBlendingMerged;
+	double alpha = 0.5;
+	double beta = 0.5;
+	double gamma = 0.0;
+	addWeighted(hsv_channels[0], alpha, cloneMask, beta, 0.0, alphaBlending[0]);
+	addWeighted(hsv_channels[1], alpha, cloneMask, beta, 0.0, alphaBlending[1]);
+	addWeighted(hsv_channels[2], alpha, cloneMask, beta, 0.0, alphaBlending[2]);
+	//  alphaBlending[0] = hsv_channels[0] * alpha + mask * beta + gamma;
+	//  alphaBlending[1] = hsv_channels[1] * alpha + mask * beta + gamma;
+	//  alphaBlending[2] = hsv_channels[2] * alpha + mask * beta + gamma;
+	merge(alphaBlending, 3, alphaBlendingMerged);
+	Mat rgbABM;
+	cvtColor(alphaBlendingMerged, rgbABM, CV_HSV2RGB);
+
+	namedWindow("alphaBlendingMerged", 0);
+	imshow("alphaBlendingMerged", rgbABM);
+
+	/*  namedWindow("alphaBlending_0", 0);
+	namedWindow("alphaBlending_1", 0);
+	namedWindow("alphaBlending_2", 0);
+	imshow("alphaBlending_0", alphaBlending[0]);
+	imshow("alphaBlending_1", alphaBlending[1]);
+	imshow("alphaBlending_2", alphaBlending[2]); */
+
+	//  отображаем нарисованные контуры
 	namedWindow("Mask", 0);
 	imshow("Mask", mask);
 
-	//	сохраняем необходимые изображения
+	//  сохраняем необходимые изображения
 	imwrite("canny.jpg", canny);
 	imwrite("mask.jpg", mask);
 
