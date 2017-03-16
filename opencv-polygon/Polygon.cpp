@@ -5,9 +5,18 @@
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
+#include <stdarg.h>
 
 using namespace cv;
 using namespace std;
+
+//функция вывода изображения в именованном окне (Named Window Image Show)
+void namedWIS(string windowName, Mat src, int flags) {
+	//содаём именованное окно
+	namedWindow(windowName, flags);
+	//отображаем изображение в окне
+	imshow(windowName, src);
+};
 
 //функция вывода информации о площади контуров
 void areaOutput(vector< vector<Point> > contours) {
@@ -45,12 +54,90 @@ void areaOutput(vector< vector<Point> > contours) {
 	fout.close();
 }
 
-int main() {
+//альфа-смешивание изображений с одинаковым или разным кол-вом каналов
+void alphaBlending(Mat src1, Mat src2, double alpha, double beta, double gamma)
+{
+	//количество каналов 1-го изображения
+	int src1_NoC = src1.channels();
+	cout << "NoC src1 = " << src1_NoC << endl;
+	//количество каналов 2-го изображения
+	int src2_NoC = src2.channels();
+	cout << "NoC src2 = " << src2_NoC << endl;
+	//определяем максимальное количество каналов (maximum number of
+	//channels)
+	int max_NoC;
+	//и количество каналов второго по канальности изображения для
+	//возможного ветвления АС
+	int second_NoC;
+	if (src1_NoC > src2_NoC) {
+		max_NoC = src1_NoC;
+		second_NoC = src2_NoC;
+	}
+	else {
+		max_NoC = src2_NoC;
+		second_NoC = src1_NoC;
+	}
+
+	//матрица для готового изображения с АС
+	Mat aplphaBlendinged = Mat::zeros(src1.rows, src1.cols, src1.type());
+
+	//если количество каналов одинаково
+	if (src1_NoC == src2_NoC)
+	{
+		//применям функцию взвешенной поэлементной суммы двух массивов, что играет роль альфа-смешивания
+		addWeighted(src1, alpha, src2, beta, gamma, aplphaBlendinged);
+	}
+
+	//если количество каналов неодинаково
+	if (src1_NoC != src2_NoC)
+	{	
+		//динамический массив под каналы 1-го изображения
+		Mat *src1_Channels = new Mat [src1_NoC];
+		//разделяем каналы 1-го изображения
+		split(src1, src1_Channels);
+
+		//динамический массив под каналы 2-го изображения
+		Mat *src2_Channels = new Mat [src2_NoC];
+		//разделяем каналы 2-го изображения
+		split(src2, src2_Channels);
+
+		//динамический массив матриц под каналы с АС
+		 Mat *channelsFAB = new Mat[max_NoC];
+
+		 //если коичество каналов второго изображения
+		 //равно единицы, то применяем поканальное альфа-смешивание:
+		 if (second_NoC = 1) {
+			 //поочерёдно смешиваем каналы первого изобажения с каналом
+			 //второго изображения
+			 for (int i = 0; i < max_NoC; i++) {
+				 addWeighted(src1_Channels[i], alpha, src2, beta, gamma, channelsFAB[i]);
+			 }
+			 //сведение каналов с альфа-смешиванием
+			 merge(channelsFAB, 3, aplphaBlendinged);
+			 namedWIS("Alpha blendinged", aplphaBlendinged, 0);
+		 }
+		 else
+		 {
+			 for (int i = 0; i < second_NoC; i++)
+			 {
+				 for (int j = 0; j < max_NoC; j++)
+				 {
+					 channelsFAB[j] = src1_Channels[j].clone();
+					 addWeighted(channelsFAB[j], alpha, src2_Channels[i], beta, gamma, channelsFAB[j]);
+				 }
+			 }
+			 merge(channelsFAB, 3, aplphaBlendinged);
+			 namedWIS("Alpha blendinged", aplphaBlendinged, 0);
+		 }
+	}
+}
+
+int main()
+{
 
 	//загружаем исходник
 	Mat src = imread("test0_copy.jpg", 1);
-	namedWindow("src", 0);
-	imshow("src", src);
+	namedWIS("src", src, 0);
 
 	//конвертируем в HSV
 	Mat hsv;
@@ -64,16 +151,16 @@ int main() {
 	Mat s_range;
 	inRange(hsv_channels[1], 0, 60, s_range);
 	//показываем результат выборки
-	namedWindow("S_Range", 0);
-	imshow("S_Range", s_range);
+	namedWIS("S_Range", s_range, 0);
 
 	//проходимся ДГК по выборке по насыщенности
 	Mat canny;
-	Canny(s_range, canny, 100, 200, 3, true);//работает он странно, к слову, для работы с маской где перепад яркости имеет бинарную основу
+	//работает он странно, к слову, для работы с маской где перепад яркости
+	//имеет бинарную основу
+	Canny(s_range, canny, 100, 200, 3, true);
 
 	//показываем результат работы ДГК
-	namedWindow("Canny", 0);
-	imshow("Canny", canny);
+	namedWIS("Canny", canny, 0);
 
 	//ищем контуры
 	vector< vector<Point> > contours;
@@ -82,36 +169,17 @@ int main() {
 
 	//создаём картинку под маску
 	Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
-	//рисуем контуры
-	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);//CV_FILLED заполняет найденные контуры
+	//рисуем контуры, CV_FILLED заполняет найденные контуры
+	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
 
 	//вывод данных о площади
 	areaOutput(contours);
-	
-	//клонируем маску
-	Mat cloneMask = mask.clone();
-	//клонируем оригинал
-	Mat cloneSrc = src.clone();
-	//массив матриц для хранения каналов оригинала
-	Mat srcRGBChannels[3];
-	split(cloneSrc, srcRGBChannels);
-	//массив матриц под хранение каналов с применением альфа смешивания
-	Mat alphaBlending[3];
-	//матрица для сведения каналов с альфа смешиванием
-	Mat alphaBlendingMerged;
-
-	
-
-	/*  namedWindow("alphaBlending_0", 0);
-	namedWindow("alphaBlending_1", 0);
-	namedWindow("alphaBlending_2", 0);
-	imshow("alphaBlending_0", alphaBlending[0]);
-	imshow("alphaBlending_1", alphaBlending[1]);
-	imshow("alphaBlending_2", alphaBlending[2]); */
 
 	//  отображаем нарисованные контуры
-	namedWindow("Mask", 0);
-	imshow("Mask", mask);
+	namedWIS("Mask", mask, 0);
+
+	//применяем альфа-смешивание
+	alphaBlending(src, mask, 0.5, 0.5, 0.0);
 
 	//  сохраняем необходимые изображения
 	imwrite("canny.jpg", canny);
