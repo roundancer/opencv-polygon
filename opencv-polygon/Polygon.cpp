@@ -10,13 +10,42 @@
 using namespace cv;
 using namespace std;
 
-//функция вывода изображения в именованном окне (Named Window Image Show)
-void namedWIS(string windowName, Mat src, int flags) {
-	//содаём именованное окно
-	namedWindow(windowName, flags);
-	//отображаем изображение в окне
-	imshow(windowName, src);
-};
+//загружаем исходник
+Mat src = imread("01_copy.jpg", 1);
+//для изображения в формате HSV
+Mat hsv;
+//матрица под канал тона (hue)
+Mat h_channel;
+//матрица под выборку тона
+Mat h_range;
+//матрица для хранения канала насыщенности (saturation)
+Mat s_channel;
+//матрица под выборку по насыщенности
+Mat s_range;
+//матрица под ДГК
+Mat canny;
+//матрица под контуры
+vector< vector<Point> > contours;
+//матрица под иерархию
+Mat hierarchy;
+//матрица под маску
+Mat global_mask;
+//матрица для готового изображения с АС
+Mat aplphaBlendinged;
+//динамический массив под каналы 1-го изображения c AC
+Mat *src1_Channels;
+//динамический массив под каналы 2-го изображения c AC
+Mat *src2_Channels;
+//динамический массив матриц под каналы с АС
+Mat *channelsFAB;
+
+//для хранения промежуточной позиции ползунков нижней и верхней границы
+int lowerBoundPosition_SRange = 0;
+int upperBoundPosition_SRange = 32;
+
+//для хранения промежуточной позиции ползунков нижней и верхней тона
+int lowerBoundPosition_HRange = 91;
+int upperBoundPosition_HRange = 166;
 
 //функция вывода информации о площади контуров
 void areaOutput(vector< vector<Point> > contours) {
@@ -40,13 +69,13 @@ void areaOutput(vector< vector<Point> > contours) {
 				}*/
 
 				cout << endl << "# of contour points: " << contours[i].size() << endl;
-				cout << "Area in px: " << varContourArea << endl;
-				cout << "Area in cm: " << areaInSm << endl;
+				cout << "Площадь in px: " << varContourArea << endl;
+				cout << "Площадь in cm: " << areaInSm << endl;
 				cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
 
 				fout << endl << "# of contour points: " << contours[i].size() << endl;
-				fout << "Area in px: " << varContourArea << endl;
-				fout << "Area in cm: " << areaInSm << endl << endl;
+				fout << "Площадь in px: " << varContourArea << endl;
+				fout << "Площадь in cm: " << areaInSm << endl << endl;
 				fout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
 			}
 		}
@@ -59,12 +88,12 @@ void alphaBlending(Mat src1, Mat src2, double alpha, double beta, double gamma)
 {
 	//количество каналов 1-го изображения
 	int src1_NoC = src1.channels();
-	cout << "NoC src1 = " << src1_NoC << endl;
+	//cout << "NoC src1 = " << src1_NoC << endl;
 	//количество каналов 2-го изображения
 	int src2_NoC = src2.channels();
-	cout << "NoC src2 = " << src2_NoC << endl;
-	//определяем максимальное количество каналов (maximum number of
-	//channels)
+	//cout << "NoC src2 = " << src2_NoC << endl;
+	//определяем максимальное количество каналов (maximum Number of
+	//Channels)
 	int max_NoC;
 	//и количество каналов второго по канальности изображения для
 	//возможного ветвления АС
@@ -79,7 +108,7 @@ void alphaBlending(Mat src1, Mat src2, double alpha, double beta, double gamma)
 	}
 
 	//матрица для готового изображения с АС
-	Mat aplphaBlendinged = Mat::zeros(src1.rows, src1.cols, src1.type());
+	//aplphaBlendinged = Mat::zeros(src1.rows, src1.cols, src1.type());
 
 	//если количество каналов одинаково
 	if (src1_NoC == src2_NoC)
@@ -90,101 +119,160 @@ void alphaBlending(Mat src1, Mat src2, double alpha, double beta, double gamma)
 
 	//если количество каналов неодинаково
 	if (src1_NoC != src2_NoC)
-	{	
+	{
 		//динамический массив под каналы 1-го изображения
-		Mat *src1_Channels = new Mat [src1_NoC];
+		if (!src1_Channels)
+		{
+			src1_Channels = new Mat[src1_NoC];
+		}
+
 		//разделяем каналы 1-го изображения
 		split(src1, src1_Channels);
 
 		//динамический массив под каналы 2-го изображения
-		Mat *src2_Channels = new Mat [src2_NoC];
+		if (!src2_Channels)
+		{
+			src2_Channels = new Mat[src2_NoC];
+		}
 		//разделяем каналы 2-го изображения
 		split(src2, src2_Channels);
 
-		//динамический массив матриц под каналы с АС
-		 Mat *channelsFAB = new Mat[max_NoC];
+		if (!channelsFAB)
+		{
+			channelsFAB = new Mat[max_NoC];
+		}
 
-		 //если коичество каналов второго изображения
-		 //равно единицы, то применяем поканальное альфа-смешивание:
-		 if (second_NoC = 1) {
-			 //поочерёдно смешиваем каналы первого изобажения с каналом
-			 //второго изображения
-			 for (int i = 0; i < max_NoC; i++) {
-				 addWeighted(src1_Channels[i], alpha, src2, beta, gamma, channelsFAB[i]);
-			 }
-			 //сведение каналов с альфа-смешиванием
-			 merge(channelsFAB, 3, aplphaBlendinged);
-			 namedWIS("Alpha blendinged", aplphaBlendinged, 0);
-		 }
-		 else
-		 {
-			 for (int i = 0; i < second_NoC; i++)
-			 {
-				 for (int j = 0; j < max_NoC; j++)
-				 {
-					 channelsFAB[j] = src1_Channels[j].clone();
-					 addWeighted(channelsFAB[j], alpha, src2_Channels[i], beta, gamma, channelsFAB[j]);
-				 }
-			 }
-			 merge(channelsFAB, 3, aplphaBlendinged);
-			 namedWIS("Alpha blendinged", aplphaBlendinged, 0);
-		 }
+		//если коичество каналов второго изображения
+		//равно единицы, то применяем поканальное альфа-смешивание:
+		if (second_NoC = 1) {
+			//поочерёдно смешиваем каналы первого изобажения с каналом
+			//второго изображения
+			for (int i = 0; i < max_NoC; i++) {
+				addWeighted(src1_Channels[i], alpha, src2, beta, gamma, channelsFAB[i]);
+			}
+			//сведение каналов с альфа-смешиванием
+			merge(channelsFAB, 3, aplphaBlendinged);
+			imshow("Alpha blendinged", aplphaBlendinged);
+		}
+		else
+		{
+			for (int i = 0; i < second_NoC; i++)
+			{
+				for (int j = 0; j < max_NoC; j++)
+				{
+					channelsFAB[j] = src1_Channels[j].clone();
+					addWeighted(channelsFAB[j], alpha, src2_Channels[i], beta, gamma, channelsFAB[j]);
+				}
+			}
+			merge(channelsFAB, 3, aplphaBlendinged);
+			imshow("Alpha blendinged", aplphaBlendinged);
+		}
 	}
 }
 
-int main()
+//функция-обработчик ползунка нижней границы тона
+void minHueLevel(int lowerPos, void*)
 {
+	inRange(h_channel, lowerPos, upperBoundPosition_HRange, h_range);
+	lowerBoundPosition_HRange = lowerPos;
+};
 
-	//загружаем исходник
-	Mat src = imread("test0_copy.jpg", 1);
-	namedWIS("src", src, 0);
+//функция-обработчик ползунка верхней границы тона
+void maxHueLevel(int upperPos, void*)
+{
+	inRange(h_channel, lowerBoundPosition_HRange, upperPos, h_range);
+	upperBoundPosition_HRange = upperPos;
+}
 
-	//конвертируем в HSV
-	Mat hsv;
+//функция-обработчик ползунка нижней границы насыщенности
+void minSaturationLevel(int lowerPos, void*)
+{
+	inRange(s_channel, lowerPos, upperBoundPosition_SRange, s_range);
+	lowerBoundPosition_SRange = lowerPos;
+};
+//функция-обработчик ползунка верхней границы насыщенности
+void maxSaturationLevel(int upperPos, void*)
+{
+	inRange(s_channel, lowerBoundPosition_SRange, upperPos, s_range);
+	upperBoundPosition_SRange = upperPos;
+}
+
+int main(int argc, char* argv[])
+{
+	//окна для отображения картнки
+	namedWindow("src", 0);
+	imshow("src", src);
+	namedWindow("S_Range", 0);
+	namedWindow("H_Range", 0);
+	namedWindow("Canny", 0);
+	namedWindow("Mask", 0);
+	namedWindow("Alpha blendinged", 0);
+
+	//конвертируем в HSV	
 	cvtColor(src, hsv, CV_RGB2HSV);
-
 	//разбиваем на каналы
 	Mat hsv_channels[3];
 	split(hsv, hsv_channels);
+	//передаём канал S в предопределённую переменную
+	h_channel = hsv_channels[0];
+	s_channel = hsv_channels[1];
 
-	//делаем выборку по насыщенности
-	Mat s_range;
-	inRange(hsv_channels[1], 0, 60, s_range);
-	//показываем результат выборки
-	namedWIS("S_Range", s_range, 0);
+	//ползунок нижней границы выборки по насыщенности
+	createTrackbar("НГН", "S_Range", &lowerBoundPosition_SRange, 255, minSaturationLevel);
 
-	//проходимся ДГК по выборке по насыщенности
-	Mat canny;
-	//работает он странно, к слову, для работы с маской где перепад яркости
-	//имеет бинарную основу
-	Canny(s_range, canny, 100, 200, 3, true);
+	//ползунок верхней границы выборки по насыщенности
+	createTrackbar("ВГН", "S_Range", &upperBoundPosition_SRange, 255, maxSaturationLevel);
 
-	//показываем результат работы ДГК
-	namedWIS("Canny", canny, 0);
+	//ползунок нижней границы выборки по насыщенности
+	createTrackbar("НГТ", "H_Range", &lowerBoundPosition_HRange, 255, minHueLevel);
 
-	//ищем контуры
-	vector< vector<Point> > contours;
-	Mat hierarchy;
-	findContours(s_range, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	//ползунок верхней границы выборки по насыщенности
+	createTrackbar("ВГТ", "H_Range", &upperBoundPosition_HRange, 255, maxHueLevel);
 
-	//создаём картинку под маску
-	Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
-	//рисуем контуры, CV_FILLED заполняет найденные контуры
-	drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
+	//выборка по тону
+	inRange(h_channel, lowerBoundPosition_HRange, upperBoundPosition_HRange, h_range);
+
+	//выборка по насыщенности
+	inRange(s_channel, lowerBoundPosition_SRange, upperBoundPosition_SRange, s_range);
+
+	while (true) {
+		//создаём картинку под маску
+		Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
+		imshow("S_Range", s_range);
+		imshow("H_Range", h_range);
+		//проходимся ДГК по выборке по насыщенности
+		//работает он странно, к слову, для работы с маской  
+		//где перепад яркости имеет бинарную основу
+		Canny(s_range, canny, 100, 200, 3, true);
+		//показываем результат работы ДГК
+		imshow("Canny", canny);
+		//ищем контуры
+		findContours(s_range, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+		//рисуем контуры, CV_FILLED заполняет найденные контуры
+		drawContours(mask, contours, -1, Scalar(255), CV_FILLED);
+		//отображаем нарисованные контуры
+		imshow("Mask", mask);
+
+		//применяем альфа-смешивание
+		alphaBlending(src, h_range, 0.5, 0.5, 0.0);
+
+		char c = cvWaitKey(33);
+		if (c == 27)
+		{
+			global_mask = mask;
+			break;
+		}
+		mask.release();
+	}
 
 	//вывод данных о площади
 	areaOutput(contours);
 
-	//  отображаем нарисованные контуры
-	namedWIS("Mask", mask, 0);
-
-	//применяем альфа-смешивание
-	alphaBlending(src, mask, 0.5, 0.5, 0.0);
-
-	//  сохраняем необходимые изображения
+	//сохраняем необходимые изображения
 	imwrite("canny.jpg", canny);
-	imwrite("mask.jpg", mask);
+	imwrite("mask.jpg", global_mask);
 
 	waitKey();
+
 	return 0;
 }
